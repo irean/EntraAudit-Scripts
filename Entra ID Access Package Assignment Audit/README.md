@@ -1,250 +1,96 @@
 # Entra ID Access Package Assignment Audit
-A PowerShell toolkit for auditing and comparing **Microsoft Entra ID (Azure AD)** users against **Access Package assignments** in **Entra ID Governance**.  
 
-This script automates the process of:
-- Connecting to Microsoft Graph  
-- Retrieving users dynamically (via filters, group membership, or manual lists)  
-- Comparing users against a specific Access Package  
-- Displaying real-time progress and exporting results  
-
-## Features
-
-- Automatically ensures required PowerShell modules (`Microsoft.Graph.*`, `ImportExcel`) are installed and imported  
-- Retrieve Entra ID users by:
-  - Country, Department, Company Name, EmployeeId prefix  
-  - Group membership  
-  - Manual CSV import  
-- Compare user lists with Access Package assignments in Microsoft Graph    
-- Supports Entra ID Governance use cases  
-
-## Requirements
-
-| Component | Minimum Version | Notes |
-|------------|----------------|-------|
-| PowerShell | 7.2+ | Recommended for cross-platform compatibility |
-| Modules | Microsoft.Graph, Microsoft.Graph.Authentication, ImportExcel | Installed automatically if missing |
-| Permissions | `User.Read.All`, `EntitlementManagement.Read.All`, `Group.Read.All`, `Organization.Read.All` | Required for Graph API access |
+Audit and compare Entra ID user populations against Access Package assignments.
+Built for governance teams who need visibility into who should have access — and who doesn't.
 
 ---
 
-## Installation
+## Overview
 
-1. Clone or download this script.
-2. Open PowerShell and run as Administrator.
-3. Import the script:
+This script provides an interactive audit wizard that:
+1. Retrieves users from Entra ID using filters, group membership, or CSV import
+2. Compares them against a specified Access Package
+3. Exports a detailed Excel report with assignment status, summaries, and a pivot chart
 
-   ```powershell
-   . .\Start-UserAccessPackageAudit.ps1
-   ```
-4. Run the main command:
-    ```powershell
-    Start-UserAccessPackageAudit
-    ```
-## Workflow Overview
-1. **Module Validation** 
+---
 
-Ensures all required modules are present using Test-Module.
+## Functions
 
-2. **Graph Connection**
+| Function | Description |
+|---|---|
+| `Start-UserAccessPackageAudit` | Main entry point — interactive wizard to run the full audit |
+| `Get-UsersDynamic` | Retrieves users by filter, group membership, or manual input |
+| `Get-AccessPackageAssignmentsTargets` | Gets all delivered assignments for a specific Access Package |
+| `Compare-UsersToAccessPackageAssignments` | Compares a user list to Access Package assignments |
+| `Compare-UsersToAccessPackageAssignmentsWithProgress` | Same as above with real-time progress feedback |
+| `Export-AccessPackageReportToExcel` | Exports audit results to a formatted Excel workbook |
+| `Select-FolderPath` | Opens a folder picker dialog for export path selection |
 
-Authenticates via Connect-MgGraph with the required scopes.
+---
 
-3. **User Retrieval Options**
+## Prerequisites
 
-Choose one of:
+- PowerShell 7+
+- [Microsoft Graph PowerShell SDK](https://learn.microsoft.com/en-us/powershell/microsoftgraph/installation)
+- [ImportExcel module](https://github.com/dfinke/ImportExcel)
 
-    - Filter by country, department, company, etc.
+## Required Graph Scopes
 
-    - Retrieve group members
+- `User.Read.All`
+- `Organization.Read.All`
+- `Group.Read.All`
+- `EntitlementManagement.Read.All`
 
-    - Import users manually via CSV
+---
 
-4. **Access Package Comparison**
+## Quick Start
 
-Compares each user against Access Package assignments with detailed progress and output.
-
-5. **Export Results**
-
-Selects a folder for report export via Windows folder picker.
-
-## Function Overview
-
-1. `Test-Module`
-Ensures that a required PowerShell module is **installed** and **imported**.  
-If the module is missing, it will automatically install it from the PowerShell Gallery and import it into the current session.
-2. `ConvertTo-PSCustomObject`
-Recursively converts nested hashtables or arrays into structured PSCustomObject instances.
-
-Useful when working with complex JSON from Graph API responses.
-3. `igall`
-Handles Microsoft Graph pagination automatically.
 ```powershell
-igall -Uri "https://graph.microsoft.com/v1.0/users" -Eventual
-```
-- Adds ConsistencyLevel=eventual when specified.
+# Dot-source the script
+. .\Report-EntraIDAccessPackageAssignment.ps1
 
-- Retrieves all pages of data with a loop up to a limit.
-4. `Get-AccessPackageAssignmentsTargets`
-Retrieves all **Delivered** Access Package assignments for a given **Access Package ID**.
-```powershell
-Get-AccessPackageAssignmentsTargets -AccessPackageId "b3a77f84-6a3d-44b1-9f50-d32c17346a31"
-```
-Outputs user details such as:
-- AccessPackageName
-
-- Policy Name
-
-- Target Object ID
-
-- PrincipalName
-
-- Assignment State and Status
-5. `Compare-UsersToAccessPackageAssignmentsWithProgress`
-Compares a list of users against Access Package assignments.
-```powershell
-Compare-UsersToAccessPackageAssignmentsWithProgress -AccessPackageId "b3a77f84-6a3d-44b1-9f50-d32c17346a31" -UserList $users
-```
-6. `Get-UsersDynamic`
-
-Flexible user retrieval for different scenarios.
-
-Syntax: 
-```powershell
-Get-UsersDynamic [[-Country] <String>] [[-Department] <String>] [[-CompanyName] <String>] [[-GroupId] <String>] [[-EmployeeIdStartsWith] <String>] [-EmployeeIdNotNull] [-EmployeeLeaveDateTimeNotNull]
-```
-7. `Select-FolderPath`
-
-Opens a Windows dialog for selecting a folder where reports will be saved.
-8. `Start-UserAccessPackageAudit`
-The main function that ties everything together.
-```powershell
+# Run the interactive audit wizard
 Start-UserAccessPackageAudit
 ```
 
-Prompts interactively for:
+The wizard will guide you through:
+- Selecting how to retrieve users (filter / group / CSV)
+- Entering the Access Package ObjectId
+- Selecting an export folder
 
-- Connection to Graph
+---
 
-- User retrieval method
+## Output
 
-- Access Package ID
+The exported Excel workbook contains:
 
-- Export folder
+| Sheet | Contents |
+|---|---|
+| `DetailedReport` | All users with full attributes and assignment status |
+| `Summary` | Counts per Access Package policy, with pivot table and 3D pie chart |
+| `UserNotAssigned` | Filtered list of users not assigned to the Access Package |
 
-Then runs the comparison and generates a report.
+The filename is automatically generated:
+`OrganizationName-AccessPackageName-YYYY-MM-DD.xlsx`
 
-## Example Usage    
+---
 
-```powershell 
-PS C:\code> start-UserAccessPackageAudit
-==========================================
-🔎  USER & ACCESS PACKAGE AUDIT STARTED
-==========================================
-Checking module 'Microsoft.Graph.Authentication'...
-✅ Module 'Microsoft.Graph.Authentication' is already imported.
-Checking module 'ImportExcel'...
-✅ Module 'ImportExcel' is already imported.
+## Example
 
- Connecting to Microsoft Graph...
-✅ Connected to Graph successfully.
+```powershell
+# Run individual functions if needed
+$users = Get-UsersDynamic -Country "Denmark" -CompanyName "Contoso ApS"
+$results = Compare-UsersToAccessPackageAssignmentsWithProgress `
+    -AccessPackageId "b3a77f84-6a3d-44b1-9f50-d32c17346a31" `
+    -UserList $users
 
-Fetching organization name...
-🏢 Organization: Company Name 
-
-How would you like to get users?
-1️⃣  Filter (Country, EmployeeId, etc.)
-2️⃣  Group (Members of specific group)
-3️⃣  Manual (CSV import)
-Enter choice (1-3): 1
-
---- 🔍 FILTER PARAMETERS ---
-Enter country (or leave blank):
-Filter by department (or leave blank): 
-Filter by companyName (or leave blank): Company Name
-Filter EmployeeId not null? (y/n): y
-Filter EmployeeLeaveDateTime not null? (y/n): n
-🔎 Querying users with: companyName eq 'Company Name' and accountEnabled eq true
-
-✅ Retrieved 13 users for comparison.
-
-Enter Access Package ObjectId: 58f12289-ca67-46bd-aebe-222b6ff3877e
-📦 Selected Access Package: Workvivo
-
-🔍 Comparing users to Access Package assignments...
-
- Starting user comparison against Access Package assignments...
-Querying Microsoft Graph for assignments...                                                                             
-    → https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/assignments?$expand=target,accessPackage,assignmentPolicy&$filter=accessPackage/id eq '58f12289-ca67-46bd-aebe-222b6ff3877e' and state eq 'Delivered'
-✅ Retrieved 1573 Access Package assignments.
-👥 Beginning comparison for 13 users...
-✅ Comparison complete for 13 users.
-Summary:
-   → Assigned: 13
-   → Not assigned: 0
-
-📁 Select output folder for Excel export...
---------------------------------------------------------
-📂 Please select a folder where the report will be saved.
-⚠️  The folder selection window may appear behind other open windows.
-If you don't see it, try minimizing other windows.
---------------------------------------------------------
-✅ Export folder selected: C:\Reports
-
-DetailedReport   : DetailedReport
-Summary          : Summary
-Package          : OfficeOpenXml.Packaging.ZipPackage
-Encryption       : OfficeOpenXml.ExcelEncryption
-Workbook         : OfficeOpenXml.ExcelWorkbook
-DoAdjustDrawings : True
-File             : C:\Reports folder\Company_Name-Workvivo-2025-11-10.xlsx
-Stream           : System.IO.MemoryStream
-Compression      : Level6
-Compatibility    : OfficeOpenXml.Compatibility.CompatibilitySettings
-
-✅ Excel report created successfully: C:\Reports folder\Company_Name-Workvivo-2025-11-10.xlsx
-Sheets included: Summary, DetailedReport, UsersNotAssigned
-==========================================
-✅  USER & ACCESS PACKAGE AUDIT COMPLETE
-==========================================
-
+$results | Where-Object { -not $_.Assigned }
 ```
-## Required Microsft Graph Scopes
-
-The following **delegated permissions** are required:
-
-- `User.Read.All`  
-- `Directory.Read.All`  
-- `EntitlementManagement.Read.All`  
-- `Group.Read.All`  
-- `Organization.Read.All`  
-
->  If not already consented, you’ll be prompted during the Graph connection.
----
-
-## 🧑‍💻 Author & Metadata
-
-| Field | Info |
-|-------|------|
-| **Author** | Sandra Saluti |
-| **Version** | 1.0 |
-| **Date** | 2025-11-10 |
-| **Tags** | Microsoft Graph, Entra ID, Governance, Access Packages |
-| **License** | MIT |
-
 
 ---
-## References
 
-- [Microsoft Graph API – Entitlement Management](https://learn.microsoft.com/en-us/graph/api/resources/entitlementmanagement-overview)  
-- [Microsoft Graph API – Access Package Assignment](https://learn.microsoft.com/en-us/graph/api/resources/accesspackageassignment?view=graph-rest-1.0)  
-- [Microsoft Graph PowerShell SDK](https://learn.microsoft.com/en-us/powershell/microsoftgraph/overview)
+## Author
 
----
-## Example CSV Format for Manual Import
-
-When using **manual import mode**, the CSV should be formatted like this:
-
-```csv
-ObjectId,DisplayName,PrincipalName,EmployeeId,EmployeeHireDate,JobTitle,AccountEnabled,Department,CompanyName
-8c5ab4e3-14a2-47f8-a6a3-9ef8c97d3a90,Jane Doe,jane.doe@company.com,12345,2024-01-01,Consultant,True,IT,Company Name
-``` 
+**Sandra Saluti** — Identity & Governance Consultant at Epical
+[LinkedIn](https://www.linkedin.com/in/sandra-saluti-6866a686/) ·
+[Blog](https://agderinthe.cloud/author/sandra/)
