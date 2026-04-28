@@ -1,186 +1,94 @@
-# Entra ID Admin & Role Report
+# Entra Admin Role Report
 
-PowerShell script that generates an Excel report of:
+Generates a comprehensive Excel report of all admin role assignments in Microsoft 
+Entra ID and Azure, including active assignments, PIM eligible roles, and Azure 
+subscription role assignments.
 
-- **Active Entra ID administrators**
-- **PIM eligible roles**
-- **Azure RBAC role assignments**
-- **User authentication methods and MFA status**
-
-The report helps identify privileged users and review MFA posture for administrative accounts.
+Built for governance and security reviews where you need a complete picture of 
+who has privileged access — and when they last used it.
 
 ---
 
-## Features
+## Overview
 
-- Retrieves **Entra ID directory role members**
-- Retrieves **PIM eligible role assignments**
-- Expands **group-based role assignments**
-- Collects **user sign-in activity**
-- Reports **registered authentication methods**
-- Detects **strong MFA methods**
-- Retrieves **Azure RBAC role assignments across subscriptions**
-- Exports results to **Excel**
+This script produces a single Excel workbook with three sheets:
+
+| Sheet | Contents |
+|---|---|
+| `Administrators` | All active directory role assignments, excluding PIM-activated roles |
+| `Eligible Roles` | All PIM eligible role assignments, including group-based eligibility |
+| `Azure Roles` | Role assignments across all Azure subscriptions |
+
+For each user the report includes last sign-in datetime, account status, company 
+name, password age, and creation date — giving you the context needed to identify 
+stale or risky admin accounts at a glance.
 
 ---
 
-## Requirements
+## Prerequisites
 
-PowerShell **7+**
+- PowerShell 7+
+- [Microsoft Graph PowerShell SDK](https://learn.microsoft.com/en-us/powershell/microsoftgraph/installation)
+- [Az PowerShell module](https://learn.microsoft.com/en-us/powershell/azure/install-az-ps)
+- [ImportExcel module](https://github.com/dfinke/ImportExcel)
+- A `$tenantID` variable set before running the script
 
-Required modules (installed automatically if missing):
+## Required Permissions
 
-- Az.Accounts
-- Az.Resources
-- Microsoft.Graph.Authentication
-- ImportExcel
-
-### Required Graph permissions:
-
-- `RoleManagement.Read.Directory`
-- `User.Read.All`
-- `GroupMember.Read.All`
-- `Directory.Read.All`
-- `RoleEligibilitySchedule.Read.Directory`
-- `RoleManagement.Read.All`
-- `AuditLog.Read.All`
-
-
-Recommended roles:
-
-- **Global Reader**
-- **Azure Reader**
+| Scope | Purpose |
+|---|---|
+| `RoleManagement.Read.Directory` | Read directory role assignments |
+| `RoleManagement.Read.All` | Read all role management data |
+| `RoleEligibilitySchedule.Read.Directory` | Read PIM eligible role schedules |
+| `User.Read.All` | Read user details including sign-in activity |
+| `Group.Read.All` | Expand group-based role assignments |
+| `Directory.Read.All` | Read directory data |
+| `AuditLog.Read.All` | Read sign-in activity |
+| `Organization.Read.All` | Read organisation display name |
+| Az RBAC Reader | Read Azure subscription role assignments |
 
 ---
 
 ## Usage
 
-Run the script:
-
 ```powershell
-.\Generate-EntraAdminReport.ps1
+# Set your tenant ID before running
+$tenantID = "<your-tenant-id>"
+
+# Run the script
+.\EntraAdminReport.ps1
 ```
 
-### When running the script you will be prompted to:
+The script will:
+1. Install and import required modules automatically
+2. Connect to both Microsoft Graph and Azure
+3. Prompt you to select an export folder
+4. Cache all users for performance
+5. Collect active assignments, PIM eligible roles, and Azure role assignments
+6. Export results to Excel
 
-1. Sign in to Azure  
-2. Sign in to Microsoft Graph  
-3. Select a folder where the report will be saved
-
-
-
----
-
-## Output
-
-The script generates an Excel file:
-
-```powershell
-<OrganizationName>-EntraIDAdminReport-YYYY-MM-DD.xlsx
-```
-### Worksheets
-
-| Worksheet | Description |
-|-----------|-------------|
-| Administrators | Active Entra ID directory role members |
-| Eligible Roles | Users eligible for roles through Privileged Identity Management (PIM) |
-| Azure Roles | Azure RBAC role assignments across subscriptions |
+The output file is automatically named:
+`OrganizationName-EntraIDAdminReport-YYYY-MM-DD.xlsx`
 
 ---
 
-## Authentication Information
+## Design Notes
 
-For each user the script collects:
-
-- Last sign-in time
-- Last password change
-- Registered authentication methods
-- Strong MFA status
-
-Strong authentication methods detected:
-
-- Microsoft Authenticator
-- Passwordless Microsoft Authenticator
-- FIDO2 security keys
+- **User caching** — all users are pre-fetched and cached at startup to avoid 
+  repeated Graph calls per role member, significantly improving performance on 
+  large tenants.
+- **PIM separation** — active PIM-activated roles are explicitly excluded from 
+  the Administrators sheet and reported separately in Eligible Roles, avoiding 
+  double-counting.
+- **Group expansion** — group-based role assignments are expanded transitively, 
+  so nested group members are included in the report.
+- **Sign-in activity** — last sign-in datetime is included for every user, 
+  making it easy to identify dormant admin accounts.
 
 ---
 
-## Notes
+## Author
 
-- The script uses **Microsoft Graph beta endpoints**.
-- Large tenants may take longer to process due to **Graph pagination and group expansion**.
-
-## Example Report
-
-An example report is available in the repository:
-
-
-
-The report contains three worksheets.
-
-### Administrators
-
-Lists users that currently have **active Entra ID directory roles**.
-
-Includes additional security insights such as:
-
-- Last sign-in time
-- Last password change
-- Registered authentication methods
-- Strong MFA detection
-
-Example columns:
-
-| Column | Description |
-|------|------|
-| Role | Assigned directory role |
-| DisplayName | User name |
-| UserPrincipalName | Sign-in name |
-| CompanyName | Company attribute |
-| AccountEnabled | Indicates if the account is enabled |
-| CreatedDateTime | Account creation time |
-| LastPasswordChangeDateTime | Last password change |
-| LastSignInDateTime | Most recent sign-in |
-| hasStrongMFA | Indicates presence of strong MFA |
-| StrongAuthCount | Number of strong authentication methods |
-
----
-
-### Eligible Roles
-
-Lists users who are **eligible for privileged roles via PIM**.
-
-Both **direct assignments** and **group-based assignments** are included.
-
-Example columns:
-
-| Column | Description |
-|------|------|
-| DisplayName | User name |
-| UserPrincipalName | Sign-in name |
-| EligibleRole | Role available via PIM |
-| MemberType | Direct or group assignment |
-| EligibleRoleGroup | Group providing eligibility |
-
----
-
-### Azure Roles
-
-Lists **Azure RBAC role assignments across subscriptions**.
-
-Includes:
-
-- Users
-- Groups
-- Service principals
-
-Example columns:
-
-| Column | Description |
-|------|------|
-| RoleDefinitionName | Azure RBAC role |
-| DisplayName | Identity name |
-| SigninName | User sign-in |
-| ObjectId | Azure AD object ID |
-| ObjectType | Type of identity |
-| Subscription | Subscription scope admiadm
+**Sandra Saluti** — Identity & Governance Consultant at Epical
+[LinkedIn](https://www.linkedin.com/in/sandra-saluti-6866a686/) ·
+[Blog](https://agderinthe.cloud/author/sandra/)

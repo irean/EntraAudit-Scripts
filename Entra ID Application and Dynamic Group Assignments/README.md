@@ -1,121 +1,114 @@
-# Entra ID Application and Dynamic Group Assignment Exporter
+# Entra ID Application Role and Dynamic Group Assignments
 
-This PowerShell script is designed to provide a comprehensive audit of Entra ID (Azure AD) user access and memberships. Its primary purpose is to help identity and access management teams, auditors, and IT administrators understand which users have access to which applications and which dynamic groups they belong to.  
+Exports a combined report of application role assignments and dynamic group 
+memberships for Entra ID users. Useful for access reviews, application governance, 
+and understanding how users gain access to applications — directly or through 
+dynamic group membership.
 
-The script performs the following functions:
+---
 
-- Disconnects any existing Microsoft Graph sessions to ensure a clean connection.
-- Checks that all required modules (`Microsoft.Graph.Authentication` and `ImportExcel`) are installed and imported, installing them automatically if missing.
-- Connects to Microsoft Graph with the necessary delegated permissions to read users, groups, applications, and assignments.
-- Allows targeting specific users via an Excel file or exporting all users of type `member`.
-- Retrieves application role assignments for each user, including detection of SSO configuration and SCIM synchronization.
-- Retrieves dynamic group memberships and membership rules for users.
-- Exports all results to a structured Excel file with separate worksheets for application assignments and dynamic group memberships.
+## Overview
 
-**Purpose of the Script:**
+This script produces a single Excel workbook with two sheets:
 
-- To provide visibility into which users have access to which applications and groups.  
-- To enable auditing and governance of Entra ID environments.  
-- To support security reviews, compliance reporting, and access management initiatives.  
-- To document user access and group membership for ongoing IT operations or migration planning.  
+| Sheet | Contents |
+|---|---|
+| `ApplicationAssignments` | All app role assignments per user, including SSO type and SCIM provisioning status |
+| `DynamicGroupAssignments` | All dynamic group memberships per user, including membership rules |
 
-This script is especially useful for organizations that need to ensure proper access controls, verify dynamic group memberships, or analyze the configuration of application assignments in their Entra ID tenant.
-## Functions
+The script accepts either a targeted Excel list of users or runs against all 
+member users in the tenant.
 
-### Function: igall
-Retrieves all paginated results from Microsoft Graph.
+---
 
-**Parameters**
+## Prerequisites
 
-| Parameter   | Description |
-|------------|-------------|
-| `-Uri`     | The Microsoft Graph API endpoint |
-| `-Eventual`| Adds the `ConsistencyLevel: eventual` header |
-| `-limit`   | Limits pagination depth (default: 1000) |
+- PowerShell 7+
+- [Microsoft Graph PowerShell SDK](https://learn.microsoft.com/en-us/powershell/microsoftgraph/installation)
+- [ImportExcel module](https://github.com/dfinke/ImportExcel)
 
-**Example Usage**
+## Required Graph Scopes
 
 ```powershell
-$results = igall -Uri "https://graph.microsoft.com/v1.0/users"
+Connect-MgGraph -Scopes "Organization.Read.All", "User.Read.All", `
+    "GroupMember.Read.All", "Group.Read.All", "Application.Read.All"
 ```
 
-### Function: ConvertTo-PSCustomObject
+---
 
-Recursively converts nested hashtables into PowerShell objects for easier handling of Graph API responses.
-
-**Parameters**
-
-| Parameter   | Description |
-|------------|-------------|
-| `-InputObject`     | A hashtable or array of hashtables from Graph API response |
-
-**Example Usage**
-
-```Powershell
-$psObject = ConvertTo-PSCustomObject -InputObject $hash
-```
-
-**Function: test-module**
-
-Ensures a PowerShell module is installed and imported. If missing, it installs automatically.
-
-| Parameter   | Description |
-|------------|-------------|
-| `-Name`     | The name of the PowerShell module to check/import |
-
-**Example Usage**
-
-```powershell
-Test-Module -Name "Microsoft.Graph.Authentication"
-```
-
-## Required Permissions
-
-The script requires the following Microsoft Graph delegated permissions:`
-
-```pgsql
-Organization.Read.All
-User.Read.All
-GroupMember.Read.All
-Group.Read.All
-Application.Read.All
-
-```
-## Dependencies
-
-* Microsoft.Graph.Authentication
-* ImportExcel
-
-The script automatically installs missing modules for the current user.
-
-## Usage Instructions
-
-1. Open PowerShell (preferably as Administrator).
-
-2. Run the script:
+## Usage
 
 ```powershell
 .\Export-EntraID_AppRole_DynamicGroups.ps1
 ```
-3. Sign in to Microsoft Graph when prompted.
 
-4. Specify whether to use an Excel file of users:
-   - Type `Y` to select a file containing a `userPrincipalName` column.
-   - Type `N` to target all users of type `member`.
+The script will:
+1. Check and install required modules automatically
+2. Prompt you to connect to Microsoft Graph
+3. Ask whether you have an Excel list of target users
+4. Prompt you to select an export folder
+5. Collect app role assignments and dynamic group memberships
+6. Export results to Excel
 
-5. If using an Excel file, select the file using the file picker dialog.
+The output file is automatically named:
+`OrganizationName_Application_Dynamicgroup_Assignments_YYYY-MM-DD.xlsx`
 
-6. Choose a folder where the results will be saved using the folder picker dialog.
+---
 
-7. Wait for the script to complete. The script will export an Excel file containing two worksheets:
-   - `ApplicationAssignments` – contains user application role assignments including SSO and SCIM information.
-   - `DynamicGroupAssignments` – contains dynamic group memberships and membership rules.
+## User Input Options
 
-8. Open the exported Excel file to review the audit results.
+**Option 1 — Excel file of target users**
+Provide an Excel file with a column named `userPrincipalName`. The script 
+will retrieve each user from Entra ID and scope the report to that list.
 
-### Output
-The Excel file will be saved as: 
-```php-template
-<OrganizationName>_Application_Dynamicgroup_Assignments_<YYYY-MM-DD>.xlsx
-```
+**Option 2 — All tenant users**
+The script retrieves all member users from Entra ID and runs the full report 
+across the entire tenant. Note: this can take a while on large tenants.
 
+---
+
+## What the Report Captures
+
+**Application Assignments sheet**
+
+| Column | Description |
+|---|---|
+| `UserPrincipalName` | User's UPN |
+| `DisplayName` | User's display name |
+| `resourceDisplayName` | Application name |
+| `assignmentType` | Direct or group-based |
+| `GroupDisplayName` | Group name if group-based |
+| `SSO` | SSO type detected (SAML, OIDC, or False) |
+| `SCIM` | Whether SCIM provisioning is active for the app |
+
+**Dynamic Group Assignments sheet**
+
+| Column | Description |
+|---|---|
+| `UserPrincipalName` | User's UPN |
+| `GroupDisplayName` | Dynamic group name |
+| `membershipRule` | The dynamic membership rule expression |
+| `groupTypes` | Group type flags |
+| `mailenabled` / `securityenabled` | Group properties |
+
+---
+
+## Design Notes
+
+- **Service principal caching** — service principals are cached after the first 
+  lookup to avoid redundant Graph calls across users assigned to the same app.
+- **SSO detection** — the script infers SSO type from the service principal's 
+  `preferredSingleSignOnMode` and redirect URIs, distinguishing between SAML, 
+  OIDC, and non-SSO applications.
+- **SCIM detection** — checks whether an active synchronization job exists on 
+  the service principal, indicating SCIM provisioning is configured.
+- **Dynamic groups only** — group membership is filtered to dynamic groups 
+  exclusively, keeping the report focused on automatically assigned access.
+
+---
+
+## Author
+
+**Sandra Saluti** — Identity & Governance Consultant at Epical
+[LinkedIn](https://www.linkedin.com/in/sandra-saluti-6866a686/) ·
+[Blog](https://agderinthe.cloud/author/sandra/)
